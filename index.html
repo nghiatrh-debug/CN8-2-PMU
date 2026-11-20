@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CMD RFI Command Center — CN8-2 Casa Luna</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body { background-color: #f8fafc; color: #0f172a; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+    .agent-card { transition: all 0.25s ease; }
+    .agent-active { border-color: #2563eb; background-color: #eff6ff; box-shadow: 0 4px 12px rgba(37, 99, 235, 0.12); }
+    .agent-done { border-color: #16a34a; background-color: #f0fdf4; }
+    .agent-fallback { border-color: #d97706; background-color: #fffbeb; }
+    @keyframes pulseDot { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+    .dot-working { animation: pulseDot 1s infinite; }
+  </style>
+</head>
+<body class="pb-12">
+
+  <!-- Top Header -->
+  <header class="sticky top-0 z-30 bg-white border-b border-slate-200 px-4 py-3 shadow-sm">
+    <div class="max-w-4xl mx-auto flex items-center justify-between gap-2">
+      <div>
+        <div class="flex items-center gap-2">
+          <span class="px-2 py-0.5 text-xs font-semibold rounded bg-blue-100 text-blue-800">PMH · CMD</span>
+          <h1 class="text-base sm:text-lg font-bold text-slate-900">RFI Multi-Agent Office</h1>
+        </div>
+        <p class="text-xs text-slate-500 mt-0.5">Dự án: <strong>CN8-2 Casa Luna</strong> · Lọc tự động (Loại trừ CĐT PMH)</p>
+      </div>
+      <button id="btnToggleSettings" class="px-3 py-2 text-xs font-medium rounded-lg border border-slate-300 bg-slate-50 hover:bg-slate-100 text-slate-700 flex items-center gap-1.5">
+        <span>⚙️ API & Model</span>
+      </button>
+    </div>
+  </header>
+
+  <main class="max-w-4xl mx-auto px-4 pt-4 space-y-5">
+
+    <!-- API & Model Settings Drawer -->
+    <section id="settingsPanel" class="hidden bg-white rounded-xl border border-slate-200 p-4 shadow-sm space-y-4">
+      <div class="flex items-center justify-between border-b border-slate-100 pb-2">
+        <h2 class="text-sm font-bold text-slate-800">Cấu hình API Keys & Thứ tự xoay vòng (Lưu cục bộ trên máy)</h2>
+        <span class="text-[11px] text-slate-400">Để trống = Chạy chế độ Demo thông minh</span>
+      </div>
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+        <div>
+          <label class="block font-medium text-slate-600 mb-1">1. Claude API Key (Ưu tiên Tổng quản / Cảnh báo)</label>
+          <input id="keyClaude" type="password" placeholder="sk-ant-..." class="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:border-blue-500" />
+        </div>
+        <div>
+          <label class="block font-medium text-slate-600 mb-1">2. Cloudflare Workers AI Key + Account ID</label>
+          <div class="flex gap-1.5">
+            <input id="cfAccountId" type="text" placeholder="Account ID" class="w-1/2 px-2.5 py-2 border border-slate-300 rounded-lg" />
+            <input id="keyCloudflare" type="password" placeholder="API Token" class="w-1/2 px-2.5 py-2 border border-slate-300 rounded-lg" />
+          </div>
+        </div>
+        <div>
+          <label class="block font-medium text-slate-600 mb-1">3. OpenRouter API Key</label>
+          <input id="keyOpenRouter" type="password" placeholder="sk-or-..." class="w-full px-3 py-2 border border-slate-300 rounded-lg" />
+        </div>
+        <div>
+          <label class="block font-medium text-slate-600 mb-1">4. Groq API Key (Ưu tiên Agent 1 lọc nhanh)</label>
+          <input id="keyGroq" type="password" placeholder="gsk_..." class="w-full px-3 py-2 border border-slate-300 rounded-lg" />
+        </div>
+        <div class="sm:col-span-2">
+          <label class="block font-medium text-slate-600 mb-1">5. Gemini API Key (Phân tích tiến độ / Dự phòng)</label>
+          <input id="keyGemini" type="password" placeholder="AIza..." class="w-full px-3 py-2 border border-slate-300 rounded-lg" />
+        </div>
+      </div>
+      <div class="flex justify-end gap-2 pt-1">
+        <button id="btnSaveKeys" class="px-4 py-2 text-xs font-semibold rounded-lg bg-blue-600 text-white hover:bg-blue-700">Lưu cấu hình</button>
+      </div>
+    </section>
+
+    <!-- Virtual Office Floorplan (4 Agents) -->
+    <section class="bg-white rounded-xl border border-slate-200 p-4 shadow-sm">
+      <div class="flex items-center justify-between mb-3">
+        <h2 class="text-xs font-bold uppercase tracking-wider text-slate-500">Sơ đồ Văn phòng Agent (Live Routing)</h2>
+        <span id="officeGlobalStatus" class="text-xs font-medium text-slate-500">Sẵn sàng nhận lệnh</span>
+      </div>
+
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+        <!-- Orchestrator -->
+        <div id="card-orchestrator" class="agent-card rounded-xl border border-slate-200 bg-slate-50 p-3">
+          <div class="flex items-center justify-between">
+            <span class="text-xs font-bold text-slate-800">👔 Tổng quản PMO</span>
+            <span id="dot-orchestrator" class="w-2.5 h-2.5 rounded-full bg-slate-300"></span>
+          </div>
+          <p class="text-[11px] text-slate-500 mt-1">Điều phối, phân loại & kiểm soát số liệu thật</p>
+          <div class="mt-2 pt-2 border-t border-slate-200/70 flex items-center justify-between text-[11px]">
+            <span id="model-orchestrator" class="font-mono text-blue-700 font-medium">Claude / Gemini</span>
+            <span id="state-orchestrator" class="text-slate-500">Chờ lệnh</span>
+          </div>
+        </div>
+
+        <!-- Agent 1 -->
+        <div id="card-agent1" class="agent-card rounded-xl border border-slate-200 bg-slate-50 p-3">
+          <div class="flex items-center justify-between">
+            <span class="text-xs font-bold text-slate-800">⚡ Agent 1: Lọc Log</span>
+            <span id="dot-agent1" class="w-2.5 h-2.5 rounded-full bg-slate-300"></span>
+          </div>
+          <p class="text-[11px] text-slate-500 mt-1">Loại PMH, tính ngày trễ, chấm điểm khẩn cấp</p>
+          <div class="mt-2 pt-2 border-t border-slate-200/70 flex items-center justify-between text-[11px]">
+            <span id="model-agent1" class="font-mono text-emerald-700 font-medium">Groq / Flash</span>
+            <span id="state-agent1" class="text-slate-500">Nghỉ</span>
+          </div>
+        </div>
+
+        <!-- Agent 2 -->
+        <div id="card-agent2" class="agent-card rounded-xl border border-slate-200 bg-slate-50 p-3">
+          <div class="flex items-center justify-between">
+            <span class="text-xs font-bold text-slate-800">🏗️ Agent 2: Tiến độ</span>
+            <span id="dot-agent2" class="w-2.5 h-2.5 rounded-full bg-slate-300"></span>
+          </div>
+          <p class="text-[11px] text-slate-500 mt-1">Soi đường găng hầm, thân, MEP, mặt dựng</p>
+          <div class="mt-2 pt-2 border-t border-slate-200/70 flex items-center justify-between text-[11px]">
+            <span id="model-agent2" class="font-mono text-purple-700 font-medium">Gemini Pro</span>
+            <span id="state-agent2" class="text-slate-500">Nghỉ</span>
+          </div>
+        </div>
+
+        <!-- Agent 3 -->
+        <div id="card-agent3" class="agent-card rounded-xl border border-slate-200 bg-slate-50 p-3">
+          <div class="flex items-center justify-between">
+            <span class="text-xs font-bold text-slate-800">✉️ Agent 3: Cảnh báo</span>
+            <span id="dot-agent3" class="w-2.5 h-2.5 rounded-full bg-slate-300"></span>
+          </div>
+          <p class="text-[11px] text-slate-500 mt-1">Soạn thư nhắc CĐT & Talking Points họp</p>
+          <div class="mt-2 pt-2 border-t border-slate-200/70 flex items-center justify-between text-[11px]">
+            <span id="model-agent3" class="font-mono text-amber-700 font-medium">Claude Sonnet</span>
+            <span id="state-agent3" class="text-slate-500">Nghỉ</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Orchestrator Live Log -->
+      <div class="mt-3 bg-slate-900 text-slate-100 rounded-lg p-3 text-xs font-mono space-y-1 max-h-32 overflow-y-auto" id="orchestratorLog">
+        <div class="text-slate-400">&gt; Hệ thống sẵn sàng. Chọn nguồn dữ liệu bên dưới và bấm "Chạy rà soát RFI".</div>
+      </div>
+    </section>
+
+    <!-- Input & Action Bar -->
+    <section class="bg-white rounded-xl border border-slate-200 p-4 shadow-sm space-y-3">
+      <div class="flex flex-wrap items-center justify-between gap-2">
+        <div class="flex items-center gap-2 text-xs">
+          <label class="font-semibold text-slate-700">Nguồn dữ liệu:</label>
+          <select id="dataSourceMode" class="px-2.5 py-1.5 border border-slate-300 rounded-lg bg-slate-50 text-slate-800 font-medium">
+            <option value="sample">Dữ liệu mẫu CN8-2 Casa Luna (12 RFI)</option>
+            <option value="paste">Dán dữ liệu từ Google Sheet (Copy/Paste)</option>
+          </select>
+        </div>
+        <label class="flex items-center gap-1.5 text-xs text-slate-600 cursor-pointer">
+          <input id="bilingualToggle" type="checkbox" class="rounded border-slate-300 text-blue-600" />
+          <span>Xuất song ngữ Việt–Anh (Báo cáo BOP/BGĐ)</span>
+        </label>
+      </div>
+
+      <div id="pasteBox" class="hidden">
+        <textarea id="rawSheetInput" rows="4" placeholder="Dán các dòng copy từ Google Sheet RFI Log vào đây (gồm cột: Mã RFI | Bộ môn | Nội dung | Đơn vị gửi | Đơn vị phản hồi | Ngày gửi | Hạn trả lời | Trạng thái)..." class="w-full p-3 text-xs border border-slate-300 rounded-lg focus:outline-none focus:border-blue-500"></textarea>
+      </div>
+
+      <button id="btnRunWorkflow" class="w-full py-3 rounded-xl bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-semibold text-sm shadow-sm transition">
+        🚀 Chạy rà soát RFI trễ hạn & Soạn cảnh báo
+      </button>
+    </section>
+
+    <!-- Results Section -->
+    <section id="resultsSection" class="hidden bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+      <!-- Tabs -->
+      <div class="flex border-b border-slate-200 bg-slate-50 text-xs font-semibold">
+        <button data-tab="tabRfi" class="tab-btn flex-1 py-3 px-2 text-blue-600 border-b-2 border-blue-600 bg-white">1. RFI Trễ hạn (<span id="countOverdue">0</span>)</button>
+        <button data-tab="tabNotice" class="tab-btn flex-1 py-3 px-2 text-slate-600 hover:text-slate-900">2. Thư cảnh báo</button>
+        <button data-tab="tabTalking" class="tab-btn flex-1 py-3 px-2 text-slate-600 hover:text-slate-900">3. Talking Points họp</button>
+      </div>
+
+      <!-- Tab 1: Overdue RFI Table -->
+      <div id="tabRfi" class="tab-content p-4 space-y-3">
+        <div id="summaryBanner" class="p-3 rounded-lg bg-amber-50 border border-amber-200 text-xs text-amber-900"></div>
+        <div class="overflow-x-auto">
+          <table class="w-full text-left border-collapse text-xs">
+            <thead>
+              <tr class="border-b border-slate-200 text-slate-500 bg-slate-50">
+                <th class="py-2 px-2">Mã RFI</th>
+                <th class="py-2 px-2">Bộ môn / Nội dung</th>
+                <th class="py-2 px-2">Đơn vị trễ</th>
+                <th class="py-2 px-2">Trễ</th>
+                <th class="py-2 px-2">Tác động hiện trường</th>
+              </tr>
+            </thead>
+            <tbody id="rfiTableBody" class="divide-y divide-slate-100"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Tab 2: Warning Letters -->
+      <div id="tabNotice" class="tab-content hidden p-4 space-y-3">
+        <div class="flex justify-between items-center">
+          <span class="text-xs font-semibold text-slate-600">Văn bản nhắc nhở / cảnh báo chuẩn Chủ đầu tư PMH</span>
+          <button onclick="copyElementText('noticeOutput')" class="px-3 py-1.5 text-xs font-medium rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-800">📋 Copy thư</button>
+        </div>
+        <pre id="noticeOutput" class="whitespace-pre-wrap font-sans text-xs leading-relaxed bg-slate-50 p-3.5 rounded-lg border border-slate-200 text-slate-800"></pre>
+      </div>
+
+      <!-- Tab 3: Talking Points -->
+      <div id="tabTalking" class="tab-content hidden p-4 space-y-3">
+        <div class="flex justify-between items-center">
+          <span class="text-xs font-semibold text-slate-600">Gạch đầu dòng điều hành cuộc họp thứ Sáu</span>
+          <button onclick="copyElementText('talkingOutput')" class="px-3 py-1.5 text-xs font-medium rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-800">📋 Copy Talking Points</button>
+        </div>
+        <pre id="talkingOutput" class="whitespace-pre-wrap font-sans text-xs leading-relaxed bg-slate-50 p-3.5 rounded-lg border border-slate-200 text-slate-800"></pre>
+      </div>
+    </section>
+
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>
